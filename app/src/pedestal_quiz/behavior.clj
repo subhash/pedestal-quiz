@@ -1,76 +1,57 @@
 (ns ^:shared pedestal-quiz.behavior
     (:require [clojure.string :as string]
-              [io.pedestal.app.messages :as msg]))
-;; While creating new behavior, write tests to confirm that it is
-;; correct. For examples of various kinds of tests, see
-;; test/pedestal_quiz/behavior-test.clj.
+              [io.pedestal.app.messages :as msg]
+              [io.pedestal.app :as app]
+              [io.pedestal.app.dataflow :as dataflow]))
 
-(defn set-value-transform [old-value message]
-  (:value message))
+(defn create-quiz [state message]
+  (.log js/console state)
+    nil)
 
-(def example-app
-  ;; There are currently 2 versions (formats) for dataflow
-  ;; description: the original version (version 1) and the current
-  ;; version (version 2). If the version is not specified, the
-  ;; description will be assumed to be version 1 and an attempt
-  ;; will be made to convert it to version 2.
+(defn add-question [state message]
+    (let [id (gensym "question")
+          q {:text (:text message) :id id}] 
+      (assoc state :questions (assoc (:questions state) id q))))
+
+(defn edit-question [question {:keys [text]}]
+  (assoc question :text text))
+
+(defn edit-choice [choice {:keys [text]}]
+  (assoc choice :text text))
+
+(defn add-choice [question {:keys [text]}]
+  (let [id (gensym "choice")
+        c {:id id :text text}]
+    (assoc question :choices (assoc (:choices question) id c))))
+
+(defn init-main [_]
+  [[:transform-enable [:quiz] 
+    :add-question [{msg/topic [:quiz] (msg/param :text) {}}]]])
+
+(defn new-question-enabler [inputs]
+  (let [[ [[_ _ q _] text :as input ]]  (vec (dataflow/added-inputs inputs))]
+  (if (not (nil? q)) 
+    [[:transform-enable [:quiz :questions q] 
+      :edit-question [{msg/topic [:quiz :questions q] :id q (msg/param :text) {}}]]
+     [:transform-enable [:quiz :questions q] 
+      :add-choice [{msg/topic [:quiz :questions q] :id q (msg/param :text) {}}]]])))
+
+(defn new-choice-enabler [inputs]
+  (let [[ [[_ _ q _ c _] text :as input ]]  (vec (dataflow/added-inputs inputs))]
+  (if (not (nil? q)) 
+    [[:transform-enable [:quiz :questions q :choices c] 
+      :edit-choice [{msg/topic [:quiz :questions q :choices c] :id c (msg/param :text) {}}]]])))
+  
+(def quiz-app
   {:version 2
-   :transform [[:set-value [:greeting] set-value-transform]]})
-
-;; Once this behavior works, run the Data UI and record
-;; rendering data which can be used while working on a custom
-;; renderer. Rendering involves making a template:
-;;
-;; app/templates/pedestal-quiz.html
-;;
-;; slicing the template into pieces you can use:
-;;
-;; app/src/pedestal_quiz/html_templates.cljs
-;;
-;; and then writing the rendering code:
-;;
-;; app/src/pedestal_quiz/rendering.cljs
-
-(comment
-  ;; The examples below show the signature of each type of function
-  ;; that is used to build a behavior dataflow.
-
-  ;; transform
-
-  (defn example-transform [old-state message]
-    ;; returns new state
-    )
-
-  ;; derive
-
-  (defn example-derive [old-state inputs]
-    ;; returns new state
-    )
-
-  ;; emit
-
-  (defn example-emit [inputs]
-    ;; returns rendering deltas
-    )
-
-  ;; effect
-
-  (defn example-effect [inputs]
-    ;; returns a vector of messages which effect the outside world
-    )
-
-  ;; continue
-
-  (defn example-continue [inputs]
-    ;; returns a vector of messages which will be processed as part of
-    ;; the same dataflow transaction
-    )
-
-  ;; dataflow description reference
-
-  {:transform [[:op [:path] example-transform]]
-   :derive    #{[#{[:in]} [:path] example-derive]}
-   :effect    #{[#{[:in]} example-effect]}
-   :continue  #{[#{[:in]} example-continue]}
-   :emit      [[#{[:in]} example-emit]]}
-  )
+   :transform [[:create-quiz [:quiz] create-quiz]
+               [:add-question [:quiz] add-question]
+               [:edit-question [:quiz :questions :*] edit-question]
+               [:add-choice [:quiz :questions :*] add-choice]
+               [:edit-choice [:quiz :questions :* :choices :*] edit-choice]]
+   :emit [{:init init-main} 
+          [#{ [:quiz :questions :* :text]
+              [:quiz :questions :* :choices :* :text]} (app/default-emitter [])]
+          [#{ [:quiz :questions :* :text]}  new-question-enabler]
+          [#{ [:quiz :questions :* :choices :* :text]}  new-choice-enabler]
+          ]})
