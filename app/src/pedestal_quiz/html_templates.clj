@@ -14,6 +14,9 @@
   ;; The last argument to 'dtfn' is a set of fields that should be
   ;; treated as static fields (may only be set once). Dynamic templates
   ;; use ids to set values so you cannot dynamically set an id.
-  {:pedestal-quiz-page (dtfn (tnodes "pedestal-quiz.html" "hello") #{:id})})
+  {:quiz (dtfn (tnodes "quiz.html" "quiz"))
+   :question (dtfn (tnodes "quiz.html" "question"))
+   :choice-input (tfn (tnodes "quiz.html" "choice-input"))
+   :choice (dtfn (tnodes "quiz.html" "choice"))})
 
 ;; Note: this file will not be reloaded automatically when it is changed.
